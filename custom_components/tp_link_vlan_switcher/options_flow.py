@@ -20,9 +20,6 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
                 return await self.async_step_add_switch()
             if action == "remove":
                 return await self.async_step_remove_switch()
-            if action == "finish":
-                # <<<< important: this triggers update_listener + reload
-                return self.async_create_entry(title="", data={"switches": self.switches})
 
         schema = vol.Schema(
             {
@@ -30,12 +27,16 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
                     {
                         "add": "Neuen Profil-Switch hinzufügen",
                         "remove": "Vorhandenen Profil-Switch entfernen",
-                        "finish": "Fertigstellen",
                     }
                 )
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)
+
+    async def _finish(self):
+        """Create the options entry after any change."""
+        # <<<< important: this triggers update_listener + reload
+        return self.async_create_entry(title="", data={"switches": self.switches})
 
     async def async_step_add_switch(self, user_input=None):
         """Add a new profile switch."""
@@ -45,7 +46,7 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
                 "vlans": {},
                 "pvid": {},
             }
-            return await self.async_step_init()
+            return await self._finish()
 
         schema = vol.Schema(
             {
@@ -59,10 +60,10 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             name = user_input["name"]
             self.switches.pop(name, None)
-            return await self.async_step_init()
+            return await self._finish()
 
         if not self.switches:
-            return await self.async_step_init()
+            return await self._finish()
 
         schema = vol.Schema(
             {
