@@ -2,5 +2,7 @@
   "name": "brogit HACS Repository",
   "content_in_root": false,
   "render_readme": true,
-  "domains": ["tp_link_vlan_switcher"]
+  "country": ["DE"],
+  "domains": ["tp_link_vlan_switcher"],
+  "homeassistant": "2024.6.0"
 }
