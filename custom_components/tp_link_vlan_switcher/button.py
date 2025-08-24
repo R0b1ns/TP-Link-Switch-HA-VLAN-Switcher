@@ -20,7 +20,11 @@ class RebootButton(TPLinkSmartSwitchBaseEntity, ButtonEntity):
 
     def __init__(self, config_entry):
         super().__init__(config_entry)
-        self._attr_unique_id = f"{self._ip}_reboot"
+
+    @property
+    def unique_id(self):
+        """Unique ID for this button."""
+        return f"{self._ip}_reboot"
 
     async def async_press(self) -> None:
         """Send reboot command to the switch."""
@@ -36,7 +40,11 @@ class ResetButton(TPLinkSmartSwitchBaseEntity, ButtonEntity):
 
     def __init__(self, config_entry):
         super().__init__(config_entry)
-        self._attr_unique_id = f"{self._ip}_reset"
+
+    @property
+    def unique_id(self):
+        """Unique ID for this button."""
+        return f"{self._ip}_reset"
 
     async def async_press(self) -> None:
         """Send reset command to the switch."""
