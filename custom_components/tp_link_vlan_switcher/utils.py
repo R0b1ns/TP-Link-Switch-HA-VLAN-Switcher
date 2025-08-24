@@ -24,6 +24,9 @@ def extract_js_object_field(html: str, object_name: str, field: str = None):
     # Lade als Python dict
     obj = json.loads(js_obj_str)
 
+    # Transform
+    transformed_obj = {k: v[0] for k, v in obj.items()}
+
     if field:
-        return obj.get(field)[0]
-    return obj
+        return transformed_obj.get(field)
+    return transformed_obj
