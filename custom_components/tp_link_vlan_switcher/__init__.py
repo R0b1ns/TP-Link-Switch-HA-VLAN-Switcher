@@ -11,9 +11,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up TP-Link VLAN Switcher from a config entry."""
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = entry.data
 
+    # TODO: This is the old working solution
+    # async def _update_listener(hass: HomeAssistant, updated_entry: ConfigEntry):
+    #     """Reload when config entry options change."""
+    #     await hass.config_entries.async_reload(updated_entry.entry_id)
+
     async def _update_listener(hass: HomeAssistant, updated_entry: ConfigEntry):
         """Reload when config entry options change."""
-        await hass.config_entries.async_reload(updated_entry.entry_id)
+        # Trigger the platform to setup again
+        for platform in PLATFORMS:
+            hass.async_create_task(
+                hass.config_entries.async_forward_entry_setup(updated_entry, platform)
+            )
+
 
     # register listener for options updates
     entry.async_on_unload(entry.add_update_listener(_update_listener))
