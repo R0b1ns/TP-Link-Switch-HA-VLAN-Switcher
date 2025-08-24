@@ -14,20 +14,25 @@ async def async_setup_entry(
     if entry.entry_id not in hass.data[DOMAIN]:
         hass.data[DOMAIN][entry.entry_id] = {}
 
-    # Entferne alte Entitäten
-    for switch in list(hass.data[DOMAIN][entry.entry_id].values()):
-        await switch.async_remove()
-    hass.data[DOMAIN][entry.entry_id] = {}
-
-    # Optionen durchgehen und neue Switches erstellen
     options = entry.options.get("switches", {})
+    current_entities = hass.data[DOMAIN][entry.entry_id]
+
+    # Berechne welche Entitäten hinzugefügt oder entfernt werden
+    to_remove = [name for name in current_entities if name not in options]
     new_entities = []
 
     for name, cfg in options.items():
-        switch = VlanProfileSwitch(name, entry.entry_id, cfg, entry)
-        hass.data[DOMAIN][entry.entry_id][name] = switch
-        new_entities.append(switch)
+        if name not in current_entities:
+            switch = VlanProfileSwitch(name, entry.entry_id, cfg, entry)
+            current_entities[name] = switch
+            new_entities.append(switch)
 
+    # Entferne alte Entitäten
+    for name in to_remove:
+        switch = current_entities.pop(name)
+        await switch.async_remove()
+
+    # Füge neue Entitäten hinzu
     if new_entities:
         async_add_entities(new_entities, update_before_add=True)
 
