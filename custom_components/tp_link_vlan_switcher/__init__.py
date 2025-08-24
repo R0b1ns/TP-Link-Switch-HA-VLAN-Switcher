@@ -1,29 +1,23 @@
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
 from .const import DOMAIN
 
-PLATFORMS: list[Platform] = [Platform.SWITCH]
+async def async_setup(hass: HomeAssistant, config: dict):
+    """Set up the integration."""
+    hass.data.setdefault(DOMAIN, {})
+    return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-    """Set up the integration from a config entry."""
+    """Set up a config entry."""
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = entry.data
 
-    async def _update_listener(hass: HomeAssistant, updated_entry: ConfigEntry):
-        """Reload when config entry options change."""
-        # Trigger the platform to setup again
-        for platform in PLATFORMS:
-            hass.async_create_task(
-                hass.config_entries.async_forward_entry_setup(updated_entry, platform)
-            )
-
-    entry.async_on_unload(entry.add_update_listener(_update_listener))
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # Weiterleitung an Switch-Plattform
+    await hass.config_entries.async_forward_entry_setups(entry, ["switch"])
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
+    success = await hass.config_entries.async_forward_entry_unloads(entry, ["switch"])
+    if success:
         hass.data[DOMAIN].pop(entry.entry_id)
-    return unload_ok
+    return success

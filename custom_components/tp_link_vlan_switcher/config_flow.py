@@ -48,7 +48,6 @@ class VlanSwitchConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_IP, description={"name": "IP-Adresse"}): str,
             vol.Required(CONF_USERNAME, description={"name": "Benutzername"}): str,
             vol.Required(CONF_PASSWORD, description={"name": "Passwort"}): str,
-            vol.Required("port_count", description={"name": "Anzahl Ports"}, default=5): int,
         })
 
         return self.async_show_form(
