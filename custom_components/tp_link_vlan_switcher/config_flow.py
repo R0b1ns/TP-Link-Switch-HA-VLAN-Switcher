@@ -13,21 +13,12 @@ LOGIN_PATTERN = re.compile(
 )
 
 # Map TP-Link errType -> HA error bucket
-# 0 = ok
-# 1 = user/pass wrong
-# 2 = user not allowed
-# 3 = allowed login users full
-# 4 = login users full (16)
-# 5 = session timeout
-# 6 = force change password
-ERR_INVALID_AUTH = {1, 2, 6}
-ERR_CANNOT_CONNECT = {3, 4, 5}
+ERR_INVALID_AUTH = {1, 2, 6}   # falsche Zugangsdaten
+ERR_CANNOT_CONNECT = {3, 4, 5} # Session voll / nicht erreichbar
 
 
 class VlanSwitchConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle config flow for TP-Link VLAN Switcher."""
-
-    VERSION = 1
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -41,7 +32,9 @@ class VlanSwitchConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._test_login, ip, username, password
             )
             if ok:
-                return self.async_create_entry(title=f"VLAN Switch {ip}", data=user_input)
+                return self.async_create_entry(
+                    title=f"VLAN Switch {ip}", data=user_input
+                )
 
             # Map reason -> HA error key
             if reason == "invalid_auth":
@@ -57,7 +50,9 @@ class VlanSwitchConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_PASSWORD, description={"name": "Passwort"}): str,
         })
 
-        return self.async_show_form(step_id="user", data_schema=data_schema, errors=errors)
+        return self.async_show_form(
+            step_id="user", data_schema=data_schema, errors=errors
+        )
 
     def _test_login(self, ip: str, username: str, password: str):
         """Do a blocking login test and parse TP-Link logonInfo array."""
@@ -79,17 +74,16 @@ class VlanSwitchConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 m = LOGIN_PATTERN.search(resp.text)
                 if not m:
                     _LOGGER.debug("logonInfo array not found in response")
-                    # Wenn wir das Muster nicht finden, lieber sicher scheitern
                     return False, "cannot_connect"
 
                 err_type = int(m.group(1))
                 _LOGGER.debug("Parsed errType=%s from login page", err_type)
 
                 if err_type == 0:
-                    # optional: gleich wieder ausloggen, um Session sauber zu schließen
+                    # optional: gleich wieder ausloggen
                     try:
                         s.get(f"http://{ip}/Logout.htm", timeout=5)
-                    except Exception:  # nicht kritisch
+                    except Exception:
                         pass
                     return True, ""
 
@@ -99,7 +93,6 @@ class VlanSwitchConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if err_type in ERR_CANNOT_CONNECT:
                     return False, "cannot_connect"
 
-                # Unbekannter Fehlercode → unknown
                 return False, "unknown"
 
         except requests.exceptions.RequestException as e:
@@ -108,3 +101,9 @@ class VlanSwitchConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except Exception as e:
             _LOGGER.exception("Unexpected error during login test: %s", e)
             return False, "unknown"
+
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        """Bind options flow."""
+        from .options_flow import VlanSwitchOptionsFlowHandler
+        return VlanSwitchOptionsFlowHandler(config_entry)
