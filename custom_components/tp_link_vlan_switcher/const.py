@@ -3,7 +3,7 @@ CONF_IP = "ip_address"
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 # TODO: Implement this
-CONF_DEVICE = "device_info"
+CONF_DEVICE = "system_info"
 CONF_PORTS = "port_count"
 
 PLATFORMS = ["button", "switch"]
