@@ -11,12 +11,17 @@ class TPLinkSmartSwitchBaseEntity(Entity):
 
     @property
     def device_info(self):
-        return {
+        info = {
             "identifiers": {(DOMAIN, self._ip)},
-            "connections": {("mac", self._device_info.get("macStr"))} if self._device_info.get("macStr") else None,
             "name": self._device_info.get("descriStr", f"VLAN Switch {self._ip}"),
             "manufacturer": "TP-Link",
-            "model": self._device_info.get("hardwareStr").split(" ", 1)[0],
+            "model": self._device_info.get("hardwareStr", "").split(" ")[0] if self._device_info.get(
+                "hardwareStr") else None,
             "sw_version": self._device_info.get("firmwareStr"),
-            "hw_version": self._device_info.get("hardwareStr").split(" ", 1)[1],
+            "hw_version": self._device_info.get("hardwareStr", "").split(" ")[1] if self._device_info.get(
+                "hardwareStr") else None,
         }
+        mac = self._device_info.get("macStr")
+        if mac:
+            info["connections"] = {("mac", mac)}
+        return info
