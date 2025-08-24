@@ -1,6 +1,6 @@
 {
-  "domain": "vlan_switch",
-  "name": "VLAN Switch",
+  "domain": "tp_link_vlan_switcher",
+  "name": "TP-Link 802.1Q VLAN Switcher",
   "version": "0.1.0",
   "documentation": "https://github.com/R0b1ns/TP-Link-Switch-HA-VLAN-Switcher",
   "requirements": ["requests"],
