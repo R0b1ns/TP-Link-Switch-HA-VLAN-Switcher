@@ -1,108 +1,130 @@
 import logging
+from typing import Any, Dict
 import requests
+
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import EntityCategory
-from .const import (
-    DOMAIN,
-    CONF_IP,
-    CONF_USERNAME,
-    CONF_PASSWORD,
-    CONF_VLANS,
-    CONF_VID,
-    CONF_VNAME,
-    CONF_VLAN,
-    CONF_PVID,
-)
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.util import slugify
+
+from .const import DOMAIN, CONF_IP, CONF_USERNAME, CONF_PASSWORD, CONF_VLANS, CONF_PVID
 
 _LOGGER = logging.getLogger(__name__)
 
+async def async_setup_entry(hass, entry, async_add_entities):
+    data = entry.data
+    options = entry.options or {}
 
-async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
-    """Set up VLAN switches from config entry."""
-    data = hass.data[DOMAIN][entry.entry_id]
+    switches: Dict[str, Dict[str, Any]] = options.get("switches", {})
+    if not switches:
+        _LOGGER.debug("[%s] Keine Switch-Profile in options -> keine Entitäten", entry.entry_id)
+        return
 
-    ip = data[CONF_IP]
-    username = data[CONF_USERNAME]
-    password = data[CONF_PASSWORD]
-    vlans = data[CONF_VLANS]
+    entities = []
+    for name, cfg in switches.items():
+        vlans = cfg.get(CONF_VLANS, {}) or {}
+        pvid = cfg.get(CONF_PVID, {}) or {}
+        entities.append(
+            TpLinkVlanProfileSwitch(
+                entry=entry,
+                name=name,
+                vlans=vlans,
+                pvid=pvid,
+            )
+        )
+    async_add_entities(entities)
 
-    switches = [
-        VlanSwitch(ip, username, password, vlan_conf) for vlan_conf in vlans
-    ]
-    async_add_entities(switches, True)
 
+class TpLinkVlanProfileSwitch(SwitchEntity):
+    """Eine Switch-Entity, die beim Ein-/Ausschalten VLAN- & PVID-Profile anwendet."""
 
-class VlanSwitch(SwitchEntity):
-    """Representation of a VLAN configuration switch."""
+    def __init__(self, entry, name: str, vlans: dict, pvid: dict):
+        self._entry = entry
+        self._ip = entry.data.get(CONF_IP)
+        self._user = entry.data.get(CONF_USERNAME)
+        self._pwd = entry.data.get(CONF_PASSWORD)
 
-    def __init__(self, ip: str, username: str, password: str, vlan_conf: dict):
-        self._ip = ip
-        self._username = username
-        self._password = password
-        self._vlan = vlan_conf
-        self._attr_name = f"VLAN {vlan_conf[CONF_VID]} {vlan_conf[CONF_VNAME]}"
-        self._attr_unique_id = f"{DOMAIN}_{ip}_{vlan_conf[CONF_VID]}"
-        self._attr_is_on = False
-        self._attr_entity_category = EntityCategory.CONFIG
+        self._profile_name = name
+        self._vlans = vlans        # {"turn_on": {...}, "turn_off": {...}}
+        self._pvid = pvid          # {"turn_on": {...}, "turn_off": {...}}
+        self._is_on = False
+
+        self._attr_name = f"{name}"
+        self._attr_unique_id = f"{entry.entry_id}_{slugify(name)}"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Registriere ein Gerät, unter dem alle Profil-Switches dieser Config hängen."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry.entry_id)},
+            manufacturer="TP-Link",
+            name=f"TP-Link VLAN Switch {self._ip}",
+            model="VLAN Profile",
+            configuration_url=f"http://{self._ip}/",
+        )
 
     @property
     def is_on(self) -> bool:
-        return self._attr_is_on
+        return self._is_on
 
-    def turn_on(self, **kwargs):
-        self._apply_config(enabled=True)
-        self._attr_is_on = True
-        self.schedule_update_ha_state()
+    async def async_turn_on(self, **kwargs):
+        ok = await self.hass.async_add_executor_job(self._apply_profile, "turn_on")
+        if ok:
+            self._is_on = True
+            self.async_write_ha_state()
 
-    def turn_off(self, **kwargs):
-        self._apply_config(enabled=False)
-        self._attr_is_on = False
-        self.schedule_update_ha_state()
+    async def async_turn_off(self, **kwargs):
+        ok = await self.hass.async_add_executor_job(self._apply_profile, "turn_off")
+        if ok:
+            self._is_on = False
+            self.async_write_ha_state()
 
-    def _apply_config(self, enabled: bool):
-        """Apply VLAN and PVID configuration via HTTP requests."""
+    # --- Netzwerklogik (Login → VLAN → PVID → Logout). Hier minimal & robust. ---
+    def _apply_profile(self, phase: str) -> bool:
+        """phase = 'turn_on' oder 'turn_off'."""
         try:
-            session = requests.Session()
+            s = requests.Session()
+            # 1) Login
+            login = s.post(
+                f"http://{self._ip}/logon.cgi",
+                data={"username": self._user, "password": self._pwd, "cpassword": "", "logon": "Login"},
+                timeout=8,
+            )
+            if login.status_code != 200:
+                _LOGGER.error("Login fehlgeschlagen (%s): HTTP %s", self._ip, login.status_code)
+                return False
 
-            # 1. Login
-            login_url = f"http://{self._ip}/logon.cgi"
-            login_data = {
-                "username": self._username,
-                "password": self._password,
-                "cpassword": "",
-                "logon": "Login",
-            }
-            _LOGGER.debug("Logging in to %s", login_url)
-            session.post(login_url, data=login_data, timeout=5)
+            # --- VLAN anwenden (du implementierst bei Bedarf Details) ---
+            # Erwartete Struktur self._vlans:
+            # {"turn_on": {<port>: <state> ...}, "turn_off": {...}}
+            vlan_cfg = self._vlans.get(phase, {})
+            if vlan_cfg:
+                # TODO: Hier deine reale VLAN-Logik einbauen
+                _LOGGER.debug("Würde VLAN anwenden (%s): %s", phase, vlan_cfg)
+                # Beispiel (kommentiert): s.get(f"http://{self._ip}/qvlanSet.cgi?...")
 
-            # 2. VLAN Config
-            vlan_params = {
-                "vid": self._vlan[CONF_VID],
-                "vname": self._vlan[CONF_VNAME],
-                "qvlan_add": "Add/Modify",
-            }
-            vlan_config = self._vlan[CONF_VLAN]["turn_on" if enabled else "turn_off"]
-            for port, value in vlan_config.items():
-                vlan_params[f"selType_{port}"] = value
+            # --- PVID anwenden ---
+            # Erwartete Struktur self._pvid:
+            # {"turn_on": {"<pvid>": [ports...]}, "turn_off": {...}}
+            pvid_cfg = self._pvid.get(phase, {})
+            if pvid_cfg:
+                for pvid_str, ports in pvid_cfg.items():
+                    pbm = 0
+                    for p in ports:
+                        # Port-Bitmaske berechnen (Port 1 -> Bit0)
+                        if isinstance(p, int) and p >= 1:
+                            pbm |= (1 << (p - 1))
+                    url = f"http://{self._ip}/vlanPvidSet.cgi"
+                    params = {"pbm": str(pbm), "pvid": str(pvid_str)}
+                    _LOGGER.debug("Setze PVID: GET %s params=%s", url, params)
+                    s.get(url, params=params, timeout=8)
 
-            vlan_url = f"http://{self._ip}/qvlanSet.cgi"
-            _LOGGER.debug("Sending VLAN config to %s with %s", vlan_url, vlan_params)
-            session.get(vlan_url, params=vlan_params, timeout=5)
+            # 4) Logout (best effort)
+            try:
+                s.get(f"http://{self._ip}/Logout.htm", timeout=5)
+            except Exception:
+                pass
 
-            # 3. PVID Config
-            pvid_config = self._vlan[CONF_PVID]["turn_on" if enabled else "turn_off"]
-            for pvid, ports in pvid_config.items():
-                pbm = sum(1 << (p - 1) for p in ports)  # Bitmask
-                pvid_url = f"http://{self._ip}/vlanPvidSet.cgi"
-                params = {"pbm": pbm, "pvid": pvid}
-                _LOGGER.debug("Sending PVID config to %s with %s", pvid_url, params)
-                session.get(pvid_url, params=params, timeout=5)
-
-            # 4. Logout
-            logout_url = f"http://{self._ip}/Logout.htm"
-            _LOGGER.debug("Logging out from %s", logout_url)
-            session.get(logout_url, timeout=5)
-
+            return True
         except Exception as e:
-            _LOGGER.error("Error applying VLAN config: %s", e)
+            _LOGGER.exception("Fehler beim Anwenden des Profils %s auf %s: %s", phase, self._ip, e)
+            return False

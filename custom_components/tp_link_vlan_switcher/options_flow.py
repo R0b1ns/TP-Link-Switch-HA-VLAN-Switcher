@@ -1,79 +1,51 @@
+import json
 import voluptuous as vol
 from homeassistant import config_entries
-from .const import DOMAIN, CONF_VLANS, CONF_PVID
-
+from .const import CONF_VLANS, CONF_PVID
 
 class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle options flow for VLAN/PVID Switch definitions."""
+    """OptionsFlow: Switch-Profile (Name + VLAN/PVID) verwalten."""
 
     def __init__(self, config_entry):
         self.config_entry = config_entry
         self.switches = dict(config_entry.options.get("switches", {}))
-        self.current_name = None
-        self.current_vlans = {}
-        self.current_pvid = {}
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
             action = user_input["action"]
             if action == "add_switch":
-                return await self.async_step_add_switch_name()
+                return await self.async_step_add_switch()
             if action == "finish":
+                # Speichern -> __init__-Update-Listener triggert Reload, Entitäten werden neu erstellt
                 return self.async_create_entry(title="", data={"switches": self.switches})
 
         schema = vol.Schema({
-            vol.Required("action", default="finish"): vol.In(
-                {
-                    "add_switch": "Neuen Switch hinzufügen",
-                    "finish": "Speichern & Beenden",
-                }
-            )
+            vol.Required("action", default="finish"): vol.In({
+                "add_switch": "Neuen Profil-Switch hinzufügen",
+                "finish": "Speichern & Beenden",
+            })
         })
         return self.async_show_form(step_id="init", data_schema=schema)
 
-    async def async_step_add_switch_name(self, user_input=None):
+    async def async_step_add_switch(self, user_input=None):
+        errors = {}
         if user_input is not None:
-            self.current_name = user_input["name"]
-            return await self.async_step_add_switch_vlans()
+            name = user_input["name"].strip()
+            try:
+                vlans = json.loads(user_input["vlans_json"]) if user_input.get("vlans_json") else {}
+                pvid = json.loads(user_input["pvid_json"]) if user_input.get("pvid_json") else {}
+                # Minimale Validierung
+                if not isinstance(vlans, dict) or not isinstance(pvid, dict):
+                    errors["base"] = "invalid_json"
+                else:
+                    self.switches[name] = {CONF_VLANS: vlans, CONF_PVID: pvid}
+                    return await self.async_step_init()
+            except Exception:
+                errors["base"] = "invalid_json"
 
         schema = vol.Schema({
-            vol.Required("name"): str,
+            vol.Required("name", description={"name": "Name der Entität"}): str,
+            vol.Optional("vlans_json", description={"name": "VLAN-Konfig (JSON)"}): str,
+            vol.Optional("pvid_json", description={"name": "PVID-Konfig (JSON)"}): str,
         })
-        return self.async_show_form(step_id="add_switch_name", data_schema=schema)
-
-    async def async_step_add_switch_vlans(self, user_input=None):
-        if user_input is not None:
-            # Ports → VLAN ID
-            self.current_vlans = {
-                "turn_on": {1: user_input["on_vlan_port1"], 2: user_input["on_vlan_port2"]},
-                "turn_off": {1: user_input["off_vlan_port1"], 2: user_input["off_vlan_port2"]},
-            }
-            return await self.async_step_add_switch_pvid()
-
-        schema = vol.Schema({
-            vol.Required("on_vlan_port1", default=1): int,
-            vol.Required("on_vlan_port2", default=1): int,
-            vol.Required("off_vlan_port1", default=0): int,
-            vol.Required("off_vlan_port2", default=0): int,
-        })
-        return self.async_show_form(step_id="add_switch_vlans", data_schema=schema)
-
-    async def async_step_add_switch_pvid(self, user_input=None):
-        if user_input is not None:
-            # PVID-ID → Ports (einfacher Input erstmal als Liste)
-            self.current_pvid = {
-                "turn_on": {user_input["on_pvid"]: [1, 2]},
-                "turn_off": {user_input["off_pvid"]: [1, 2]},
-            }
-
-            self.switches[self.current_name] = {
-                CONF_VLANS: self.current_vlans,
-                CONF_PVID: self.current_pvid,
-            }
-            return await self.async_step_init()
-
-        schema = vol.Schema({
-            vol.Required("on_pvid", default=1): int,
-            vol.Required("off_pvid", default=0): int,
-        })
-        return self.async_show_form(step_id="add_switch_pvid", data_schema=schema)
+        return self.async_show_form(step_id="add_switch", data_schema=schema, errors=errors)
