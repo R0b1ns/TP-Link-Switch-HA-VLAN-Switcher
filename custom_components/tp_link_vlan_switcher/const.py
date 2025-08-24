@@ -5,6 +5,9 @@ CONF_PASSWORD = "password"
 # TODO: Implement this
 CONF_DEVICE = "device_info"
 CONF_PORTS = "port_count"
+
+PLATFORMS = ["button", "switch"]
+
 CONF_VLANS = "vlans"
 
 # VLAN keys
