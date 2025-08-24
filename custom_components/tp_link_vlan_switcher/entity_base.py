@@ -8,7 +8,7 @@ class TPLinkSmartSwitchBaseEntity(Entity):
     def __init__(self, config_entry):
         self._config_entry = config_entry
         self._ip = config_entry.data[CONF_IP]
-        self._system_info = config_entry.data.get(CONF_DEVICE, {})
+        self._device_info = config_entry.data.get(CONF_DEVICE, {})
 
     @property
     def device_info(self):
@@ -25,10 +25,10 @@ class TPLinkSmartSwitchBaseEntity(Entity):
 
         return DeviceInfo(
             identifiers = {(DOMAIN, self._ip)},
-            name = self._system_info.get("descriStr", f"TP-Link Smart Switch {self._ip}"),
+            name = self._device_info.get("descriStr", f"TP-Link Smart Switch {self._ip}"),
             connections = mac_set,
             manufacturer = "TP-Link",
-            model = self._system_info.get("hardwareStr").split(" ", 1)[0],
-            sw_version = self._system_info.get("firmwareStr"),
-            hw_version = self._system_info.get("hardwareStr").split(" ", 1)[1],
+            model = self._device_info.get("hardwareStr").split(" ", 1)[0],
+            sw_version = self._device_info.get("firmwareStr"),
+            hw_version = self._device_info.get("hardwareStr").split(" ", 1)[1],
         )
