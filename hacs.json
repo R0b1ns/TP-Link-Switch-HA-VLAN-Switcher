@@ -1,0 +1,6 @@
+{
+  "name": "TP-Link 802.1Q VLAN Switcher",
+  "content_in_root": false,
+  "render_readme": true,
+  "domains": ["tp_link_vlan_switcher"]
+}
