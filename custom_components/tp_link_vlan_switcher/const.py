@@ -7,6 +7,6 @@ CONF_VLANS = "vlans"
 # VLAN keys
 CONF_VID = "vid"
 CONF_VNAME = "vname"
-CONF_SELTYPE = "selType"
+CONF_VLAN = "vlan"
 CONF_PVID_PORT = "pvid_port"
-CONF_PVID_ID = "pvid_id"
+CONF_PVID = "pvid"

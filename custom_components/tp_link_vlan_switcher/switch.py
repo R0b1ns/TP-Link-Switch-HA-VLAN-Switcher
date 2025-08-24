@@ -1,6 +1,8 @@
 import logging
 import requests
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from .const import (
     DOMAIN,
     CONF_IP,
@@ -9,89 +11,98 @@ from .const import (
     CONF_VLANS,
     CONF_VID,
     CONF_VNAME,
-    CONF_SELTYPE,
+    CONF_VLAN,
+    CONF_PVID,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    """Set up VLAN switches from a config entry."""
-    ip = entry.data[CONF_IP]
-    username = entry.data[CONF_USERNAME]
-    password = entry.data[CONF_PASSWORD]
-    vlans = entry.options.get(CONF_VLANS, [])
+async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
+    """Set up VLAN switches from config entry."""
+    data = hass.data[DOMAIN][entry.entry_id]
 
-    entities = []
-    for vlan in vlans:
-        entities.append(VlanSwitch(ip, username, password, vlan))
-    async_add_entities(entities, update_before_add=False)
+    ip = data[CONF_IP]
+    username = data[CONF_USERNAME]
+    password = data[CONF_PASSWORD]
+    vlans = data[CONF_VLANS]
+
+    switches = [
+        VlanSwitch(ip, username, password, vlan_conf) for vlan_conf in vlans
+    ]
+    async_add_entities(switches, True)
 
 
 class VlanSwitch(SwitchEntity):
-    """Representation of a VLAN switch."""
+    """Representation of a VLAN configuration switch."""
 
-    def __init__(self, ip, username, password, vlan):
+    def __init__(self, ip: str, username: str, password: str, vlan_conf: dict):
         self._ip = ip
         self._username = username
         self._password = password
-        self._vlan = vlan
-        self._attr_name = f"VLAN {vlan[CONF_VID]} {vlan[CONF_VNAME]}"
-        self._state = False
+        self._vlan = vlan_conf
+        self._attr_name = f"VLAN {vlan_conf[CONF_VID]} {vlan_conf[CONF_VNAME]}"
+        self._attr_unique_id = f"{DOMAIN}_{ip}_{vlan_conf[CONF_VID]}"
+        self._attr_is_on = False
+        self._attr_entity_category = EntityCategory.CONFIG
 
     @property
-    def is_on(self):
-        return self._state
+    def is_on(self) -> bool:
+        return self._attr_is_on
 
     def turn_on(self, **kwargs):
         self._apply_config(enabled=True)
-        self._state = True
+        self._attr_is_on = True
         self.schedule_update_ha_state()
 
     def turn_off(self, **kwargs):
         self._apply_config(enabled=False)
-        self._state = False
+        self._attr_is_on = False
         self.schedule_update_ha_state()
 
     def _apply_config(self, enabled: bool):
-        """Login and apply VLAN config via HTTP."""
-        session = requests.Session()
+        """Apply VLAN and PVID configuration via HTTP requests."""
         try:
-            # Login
-            login_url = f"http://{self._ip}/logon.cgi"
-            session.post(
-                login_url,
-                data={
-                    "username": self._username,
-                    "password": self._password,
-                    "cpassword": "",
-                    "logon": "Login",
-                },
-                timeout=5,
-            )
+            session = requests.Session()
 
-            # Build VLAN params
-            params = {
+            # 1. Login
+            login_url = f"http://{self._ip}/logon.cgi"
+            login_data = {
+                "username": self._username,
+                "password": self._password,
+                "cpassword": "",
+                "logon": "Login",
+            }
+            _LOGGER.debug("Logging in to %s", login_url)
+            session.post(login_url, data=login_data, timeout=5)
+
+            # 2. VLAN Config
+            vlan_params = {
                 "vid": self._vlan[CONF_VID],
                 "vname": self._vlan[CONF_VNAME],
+                "qvlan_add": "Add/Modify",
             }
-            for port, mapping in self._vlan[CONF_SELTYPE].items():
-                params[f"selType_{port}"] = (
-                    mapping["enabled"] if enabled else mapping["disabled"]
-                )
+            vlan_config = self._vlan[CONF_VLAN]["turn_on" if enabled else "turn_off"]
+            for port, value in vlan_config.items():
+                vlan_params[f"selType_{port}"] = value
 
-            params["qvlan_add"] = "Add/Modify"
+            vlan_url = f"http://{self._ip}/qvlanSet.cgi"
+            _LOGGER.debug("Sending VLAN config to %s with %s", vlan_url, vlan_params)
+            session.get(vlan_url, params=vlan_params, timeout=5)
 
-            url = f"http://{self._ip}/qvlanSet.cgi"
-            r = session.get(url, params=params, timeout=5)
-            r.raise_for_status()
+            # 3. PVID Config
+            pvid_config = self._vlan[CONF_PVID]["turn_on" if enabled else "turn_off"]
+            for pvid, ports in pvid_config.items():
+                pbm = sum(1 << (p - 1) for p in ports)  # Bitmask
+                pvid_url = f"http://{self._ip}/vlanPvidSet.cgi"
+                params = {"pbm": pbm, "pvid": pvid}
+                _LOGGER.debug("Sending PVID config to %s with %s", pvid_url, params)
+                session.get(pvid_url, params=params, timeout=5)
 
-            # Example: fetch HTML and parse status (optional, disabled now)
-            # status_url = f"http://{self._ip}/some_status_page.cgi"
-            # html = session.get(status_url).text
-            # TODO: parse HTML table and update self._state
+            # 4. Logout
+            logout_url = f"http://{self._ip}/Logout.htm"
+            _LOGGER.debug("Logging out from %s", logout_url)
+            session.get(logout_url, timeout=5)
 
         except Exception as e:
-            _LOGGER.error("Failed to apply VLAN config for %s: %s", self._vlan, e)
-        finally:
-            session.close()
+            _LOGGER.error("Error applying VLAN config: %s", e)
