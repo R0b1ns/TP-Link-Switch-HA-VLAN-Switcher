@@ -4,7 +4,7 @@ import requests
 import voluptuous as vol
 from homeassistant import config_entries
 
-from .const import DOMAIN, CONF_IP, CONF_USERNAME, CONF_PASSWORD, CONF_PORTS
+from .const import DOMAIN, CONF_IP, CONF_USERNAME, CONF_PASSWORD, CONF_PORTS, CONF_DEVICE
 from .utils import extract_js_object_field
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,8 +33,8 @@ class VlanSwitchConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._test_login, ip, username, password
             )
             if successful:
+                user_input[CONF_DEVICE] = device_info
                 return self.async_create_entry(
-                    # TODO: merge user_input with device_info
                     title=device_info['descriStr'], data=user_input
                 )
 
