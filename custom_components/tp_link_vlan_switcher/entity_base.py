@@ -1,6 +1,7 @@
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.device_registry import DeviceInfo
-from .const import DOMAIN, CONF_IP, CONF_DEVICE
+from .const import DOMAIN, CONF_IP, CONF_DEVICE, CONF_USERNAME, CONF_PASSWORD
+
 
 class TPLinkSmartSwitchBaseEntity(Entity):
     """Base entity with shared device info."""
@@ -8,6 +9,8 @@ class TPLinkSmartSwitchBaseEntity(Entity):
     def __init__(self, config_entry):
         self._config_entry = config_entry
         self._ip = config_entry.data[CONF_IP]
+        self._user = config_entry.data.get(CONF_USERNAME)
+        self._pwd = config_entry.data.get(CONF_PASSWORD)
         self._device_info = config_entry.data.get(CONF_DEVICE, {})
 
     @property
@@ -31,4 +34,5 @@ class TPLinkSmartSwitchBaseEntity(Entity):
             model = self._device_info.get("hardwareStr").split(" ", 1)[0],
             sw_version = self._device_info.get("firmwareStr"),
             hw_version = self._device_info.get("hardwareStr").split(" ", 1)[1],
+            configuration_url=f"http://{self._ip}/",
         )

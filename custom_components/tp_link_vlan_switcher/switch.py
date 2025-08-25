@@ -7,6 +7,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util import slugify
 
 from .const import DOMAIN, CONF_IP, CONF_USERNAME, CONF_PASSWORD, CONF_VLANS, CONF_PVID
+from .entity_base import TPLinkSmartSwitchBaseEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,8 +25,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         vlans = cfg.get(CONF_VLANS, {}) or {}
         pvid = cfg.get(CONF_PVID, {}) or {}
         entities.append(
-            TpLinkVlanProfileSwitch(
-                entry=entry,
+            VLANProfileSwitch(
+                config_entry=entry,
                 name=name,
                 vlans=vlans,
                 pvid=pvid,
@@ -33,15 +34,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
         )
     async_add_entities(entities)
 
-
-class TpLinkVlanProfileSwitch(SwitchEntity):
-    """Eine Switch-Entity, die beim Ein-/Ausschalten VLAN- & PVID-Profile anwendet."""
-
-    def __init__(self, entry, name: str, vlans: dict, pvid: dict):
-        self._entry = entry
-        self._ip = entry.data.get(CONF_IP)
-        self._user = entry.data.get(CONF_USERNAME)
-        self._pwd = entry.data.get(CONF_PASSWORD)
+class VLANProfileSwitch(TPLinkSmartSwitchBaseEntity, SwitchEntity):
+    def __init__(self, config_entry, name, vlans, pvid):
+        super().__init__(config_entry)
 
         self._profile_name = name
         self._vlans = vlans        # {"turn_on": {...}, "turn_off": {...}}
@@ -49,18 +44,7 @@ class TpLinkVlanProfileSwitch(SwitchEntity):
         self._is_on = False
 
         self._attr_name = f"{name}"
-        self._attr_unique_id = f"{entry.entry_id}_{slugify(name)}"
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Registriere ein Gerät, unter dem alle Profil-Switches dieser Config hängen."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.entry_id)},
-            manufacturer="TP-Link",
-            name=f"TP-Link VLAN Switch {self._ip}",
-            model="VLAN Profile",
-            configuration_url=f"http://{self._ip}/",
-        )
+        self._attr_unique_id = f"{config_entry.entry_id}_{slugify(name)}"
 
     @property
     def is_on(self) -> bool:
