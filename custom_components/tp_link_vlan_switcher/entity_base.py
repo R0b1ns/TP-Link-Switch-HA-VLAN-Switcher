@@ -35,4 +35,5 @@ class TPLinkSmartSwitchBaseEntity(Entity):
             sw_version = self._device_info.get("firmwareStr"),
             hw_version = self._device_info.get("hardwareStr").split(" ", 1)[1],
             configuration_url=f"http://{self._ip}/",
+            default_icon="mdi:lan-connect"
         )

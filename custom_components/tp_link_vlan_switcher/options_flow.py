@@ -199,7 +199,7 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
         return vol.Schema(
             {
                 vol.Required("vname", default=current.get("vname", "")): str,
-                vol.Required("vid", default=current.get("vid", 0)): int,
+                vol.Required("vid", default=current.get("vid", 1)): int,
                 vol.Required("vlans", default=json.dumps(current.get("vlans", {}), indent=2)): selector.TextSelector(
                     selector.TextSelectorConfig(multiline=True)
                 ),

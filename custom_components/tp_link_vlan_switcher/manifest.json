@@ -7,5 +7,6 @@
   "codeowners": ["@r0b1ns"],
   "iot_class": "local_polling",
   "config_flow": true,
+  "logo": "images/logo.png",
   "platforms": ["button", "switch"]
 }
