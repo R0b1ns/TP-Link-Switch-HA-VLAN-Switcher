@@ -58,6 +58,8 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
 
             try:
                 name = user_input["name"]
+                vname = user_input["vname"]
+                vid = user_input["vid"]
                 vlans = json.loads(user_input["vlans"])
                 pvid = json.loads(user_input["pvid"])
             except (ValueError, KeyError):
@@ -68,6 +70,8 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
                 )
 
             self.switches[name] = {
+                "vname": vname,
+                "vid": vid,
                 "vlans": vlans,
                 "pvid": pvid,
             }
@@ -84,11 +88,10 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
   "turn_on": {
     # state = 0 (Untagged), state = 1 (Tagged), state = 2 (Not Member)
     "<port>": <state>,
-    "<port>": <state>,
-    ...
+    "<port>": <state>
   },
   "turn_off": {
-    "<port>": <state>,
+    "<port>": <state>
   }
 }"""
         pvid_template = """{
@@ -103,6 +106,8 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
         return vol.Schema(
             {
                 vol.Required("name"): str,
+                vol.Required("vname"): str,
+                vol.Required("vid"): int,
                 vol.Required("vlans", default=vlan_template): selector.TextSelector(
                     selector.TextSelectorConfig(multiline=True)
                 ),
@@ -153,7 +158,7 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(step_id="edit_switch", data_schema=schema)
 
     async def async_step_edit_switch_details(self, user_input=None):
-        """Edit details of a switch (vlans and pvid)."""
+        """Edit details of a switch (vname, vid, vlans, pvid)."""
         current = self.switches[self._edit_name]
 
         if user_input is not None:
@@ -165,6 +170,8 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
                 )
 
             try:
+                vname = user_input["vname"]
+                vid = user_input["vid"]
                 vlans = json.loads(user_input["vlans"])
                 pvid = json.loads(user_input["pvid"])
             except (ValueError, KeyError):
@@ -175,6 +182,8 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
                 )
 
             self.switches[self._edit_name] = {
+                "vname": vname,
+                "vid": vid,
                 "vlans": vlans,
                 "pvid": pvid,
             }
@@ -189,6 +198,8 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
         """Return schema for editing a switch."""
         return vol.Schema(
             {
+                vol.Required("vname", default=current.get("vname", "")): str,
+                vol.Required("vid", default=current.get("vid", 0)): int,
                 vol.Required("vlans", default=json.dumps(current.get("vlans", {}), indent=2)): selector.TextSelector(
                     selector.TextSelectorConfig(multiline=True)
                 ),

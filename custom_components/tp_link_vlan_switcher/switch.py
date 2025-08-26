@@ -24,10 +24,15 @@ async def async_setup_entry(hass, entry, async_add_entities):
     for name, cfg in switches.items():
         vlans = cfg.get(CONF_VLANS, {}) or {}
         pvid = cfg.get(CONF_PVID, {}) or {}
+        vname = cfg.get("vname", "")
+        vid = cfg.get("vid", 0)
+
         entities.append(
             VLANProfileSwitch(
                 config_entry=entry,
                 name=name,
+                vname=vname,
+                vid=vid,
                 vlans=vlans,
                 pvid=pvid,
             )
@@ -35,15 +40,17 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities)
 
 class VLANProfileSwitch(TPLinkSmartSwitchBaseEntity, SwitchEntity):
-    def __init__(self, config_entry, name, vlans, pvid):
+    def __init__(self, config_entry, name, vname, vid, vlans, pvid):
         super().__init__(config_entry)
 
         self._profile_name = name
+        self._vname = vname
+        self._vid = vid
         self._vlans = vlans        # {"turn_on": {...}, "turn_off": {...}}
         self._pvid = pvid          # {"turn_on": {...}, "turn_off": {...}}
         self._is_on = False
 
-        self._attr_name = f"{name}"
+        self._attr_name = f"{name} ({vname}/{vid})"
         self._attr_unique_id = f"{config_entry.entry_id}_{slugify(name)}"
 
     @property
@@ -82,8 +89,8 @@ class VLANProfileSwitch(TPLinkSmartSwitchBaseEntity, SwitchEntity):
             # {"turn_on": {<port>: <state> ...}, "turn_off": {...}}
             vlan_cfg = self._vlans.get(phase, {})
             if vlan_cfg:
+                _LOGGER.debug("Würde VLAN anwenden (%s) für %s/%s: %s", phase, self._vname, self._vid, vlan_cfg)
                 # TODO: Hier deine reale VLAN-Logik einbauen
-                _LOGGER.debug("Würde VLAN anwenden (%s): %s", phase, vlan_cfg)
                 # Beispiel (kommentiert): s.get(f"http://{self._ip}/qvlanSet.cgi?...")
 
             # --- PVID anwenden ---
@@ -99,7 +106,7 @@ class VLANProfileSwitch(TPLinkSmartSwitchBaseEntity, SwitchEntity):
                             pbm |= (1 << (p - 1))
                     url = f"http://{self._ip}/vlanPvidSet.cgi"
                     params = {"pbm": str(pbm), "pvid": str(pvid_str)}
-                    _LOGGER.debug("Setze PVID: GET %s params=%s", url, params)
+                    _LOGGER.debug("Setze PVID (%s/%s): GET %s params=%s", self._vname, self._vid, url, params)
                     s.get(url, params=params, timeout=8)
 
             # 4) Logout (best effort)
@@ -110,5 +117,5 @@ class VLANProfileSwitch(TPLinkSmartSwitchBaseEntity, SwitchEntity):
 
             return True
         except Exception as e:
-            _LOGGER.exception("Fehler beim Anwenden des Profils %s auf %s: %s", phase, self._ip, e)
+            _LOGGER.exception("Fehler beim Anwenden des Profils %s auf %s/%s: %s", phase, self._vname, self._vid, e)
             return False
