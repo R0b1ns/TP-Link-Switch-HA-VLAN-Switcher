@@ -49,6 +49,13 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_add_switch(self, user_input=None):
         """Add a new profile switch."""
         if user_input is not None:
+            if not user_input.get("confirm"):
+                return self.async_show_form(
+                    step_id="add_switch",
+                    data_schema=self._get_add_schema(),
+                    errors={"base": "confirm_required"},
+                )
+
             try:
                 name = user_input["name"]
                 vlans = json.loads(user_input["vlans"])
@@ -74,12 +81,23 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
     def _get_add_schema(self):
         """Return schema for adding a switch."""
         vlan_template = """{
-  "10": "Office",
-  "20": "IoT"
+  "turn_on": {
+    # state = 0 (Untagged), state = 1 (Tagged), state = 2 (Not Member)
+    "<port>": <state>,
+    "<port>": <state>,
+    ...
+  },
+  "turn_off": {
+    "<port>": <state>,
+  }
 }"""
         pvid_template = """{
-  "1": "Default",
-  "10": "Office-Port"
+  "turn_on": {
+    "<pvid>": [<ports e.g. 1,2,3>]
+  },
+  "turn_off": {
+    "<pvid>": [<ports e.g. 1,2,3>]
+  }
 }"""
 
         return vol.Schema(
@@ -91,6 +109,7 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required("pvid", default=pvid_template): selector.TextSelector(
                     selector.TextSelectorConfig(multiline=True)
                 ),
+                vol.Required("confirm", default=False): bool,
             }
         )
 
@@ -138,6 +157,13 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
         current = self.switches[self._edit_name]
 
         if user_input is not None:
+            if not user_input.get("confirm"):
+                return self.async_show_form(
+                    step_id="edit_switch_details",
+                    data_schema=self._get_edit_schema(current),
+                    errors={"base": "confirm_required"},
+                )
+
             try:
                 vlans = json.loads(user_input["vlans"])
                 pvid = json.loads(user_input["pvid"])
@@ -169,6 +195,7 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required("pvid", default=json.dumps(current.get("pvid", {}), indent=2)): selector.TextSelector(
                     selector.TextSelectorConfig(multiline=True)
                 ),
+                vol.Required("confirm", default=False): bool,
             }
         )
 
