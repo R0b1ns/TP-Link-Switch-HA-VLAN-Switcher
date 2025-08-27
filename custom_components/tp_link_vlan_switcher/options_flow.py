@@ -11,7 +11,6 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
         self.switches = config_entry.options.get("switches", {})
         self._edit_name = None
 
