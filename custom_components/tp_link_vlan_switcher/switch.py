@@ -24,15 +24,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
     for name, cfg in switches.items():
         vlans = cfg.get(CONF_VLANS, {}) or {}
         pvid = cfg.get(CONF_PVID, {}) or {}
-        vname = cfg.get("vname", "")
-        vid = cfg.get("vid", 0)
 
         entities.append(
             VLANProfileSwitch(
                 config_entry=entry,
                 name=name,
-                vname=vname,
-                vid=vid,
                 vlans=vlans,
                 pvid=pvid,
             )
@@ -40,17 +36,15 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities)
 
 class VLANProfileSwitch(TPLinkSmartSwitchBaseEntity, SwitchEntity):
-    def __init__(self, config_entry, name, vname, vid, vlans, pvid):
+    def __init__(self, config_entry, name, vlans, pvid):
         super().__init__(config_entry)
 
         self._profile_name = name
-        self._vname = vname
-        self._vid = vid
         self._vlans = vlans        # {"turn_on": {...}, "turn_off": {...}}
         self._pvid = pvid          # {"turn_on": {...}, "turn_off": {...}}
         self._is_on = False
 
-        self._attr_name = f"{name} ({vname}/{vid})"
+        self._attr_name = name
         self._attr_unique_id = f"{config_entry.entry_id}_{slugify(name)}"
 
     @property
