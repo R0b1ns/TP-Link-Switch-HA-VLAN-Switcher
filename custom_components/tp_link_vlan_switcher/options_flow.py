@@ -86,19 +86,33 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
         """Return schema for adding a switch."""
         vlan_template = """{
   "turn_on": {
-    # state = 0 (Untagged), state = 1 (Tagged), state = 2 (Not Member)
-    "<port>": <state>,
-    "<port>": <state>
+    {
+      "vid": <vid e.g. 1>,
+      "vname": <vname e.g. "Management">,
+      "ports": {
+        # state = 0 (Untagged), state = 1 (Tagged), state = 2 (Not Member)
+        "<port>": <state>,
+        "<port>": <state>
+      }
   },
   "turn_off": {
-    "<port>": <state>
+    {
+      "vid": <vid e.g. 1>,
+      "vname": <vname e.g. "Management">,
+      "ports": {
+        # state = 0 (Untagged), state = 1 (Tagged), state = 2 (Not Member)
+        "<port>": <state>,
+        "<port>": <state>
+      }
   }
 }"""
         pvid_template = """{
   "turn_on": {
+    "<pvid>": [<ports e.g. 1,2,3>],
     "<pvid>": [<ports e.g. 1,2,3>]
   },
   "turn_off": {
+    "<pvid>": [<ports e.g. 1,2,3>],
     "<pvid>": [<ports e.g. 1,2,3>]
   }
 }"""
