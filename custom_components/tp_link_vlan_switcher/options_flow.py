@@ -3,7 +3,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers import selector
-from .const import DOMAIN
+from .const import DOMAIN, CONF_PORTS
 
 
 class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
@@ -14,6 +14,8 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
         self.config_entry = config_entry
         self.switches = config_entry.options.get("switches", {})
         self._edit_name = None
+
+        self.port_count = config_entry.data.get(CONF_PORTS)
 
     async def async_step_init(self, user_input=None):
         """Menu for options flow."""
@@ -78,46 +80,55 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=self._get_add_schema(),
         )
 
-    def _get_add_schema(self):
+    def _get_add_schema(self, user_input=None):
         """Return schema for adding a switch."""
+        if user_input is None:
+            user_input = {}
+
         vlan_template = """{
   "turn_on": [
     {
-      "vid": <vid e.g. 1>,
-      "vname": <vname e.g. "Management">,
+      "vid": 1,
+      "vname": "Management",
       "ports": {
-        "<port>": <state>,
-        "<port>": <state>
+        "1": 0,
+        "2": 2,
+        "3": 1,
+        "4": 0,
+        "5": 0,
       }
+    }
   ],
   "turn_off": [
     {
-      "vid": <vid e.g. 1>,
-      "vname": <vname e.g. "Management">,
+      "vid": 1,
+      "vname": "Management",
       "ports": {
-        "<port>": <state>,
-        "<port>": <state>
+        "1": 2,
+        "2": 0,
+        "3": 1,
+        "4": 0,
+        "5": 0,
       }
+    }
   ]
 }"""
         pvid_template = """{
   "turn_on": {
-    "<pvid>": [<ports e.g. 1,2,3>],
-    "<pvid>": [<ports e.g. 1,2,3>]
+    "1": [1,2]
   },
   "turn_off": {
-    "<pvid>": [<ports e.g. 1,2,3>],
-    "<pvid>": [<ports e.g. 1,2,3>]
+    "10": [1,2]
   }
 }"""
 
         return vol.Schema(
             {
-                vol.Required("name"): str,
-                vol.Required("vlans", default=vlan_template, description="state = 0 (Untagged), state = 1 (Tagged), state = 2 (Not Member)"): selector.TextSelector(
+                vol.Required("name", default=user_input.get("name", "")): str,
+                vol.Required("vlans", default=user_input.get("vlans", vlan_template), description="state = 0 (Untagged), state = 1 (Tagged), state = 2 (Not Member)"): selector.TextSelector(
                     selector.TextSelectorConfig(multiline=True)
                 ),
-                vol.Required("pvid", default=pvid_template, description="You can define multiple PVID configurations"): selector.TextSelector(
+                vol.Required("pvid", default=user_input.get("pvid", pvid_template), description="You can define multiple PVID configurations"): selector.TextSelector(
                     selector.TextSelectorConfig(multiline=True)
                 ),
                 vol.Required("confirm", default=False): bool,
@@ -168,10 +179,14 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
         current = self.switches[self._edit_name]
 
         if user_input is not None:
+            # Dummy-Infofelder entfernen, bevor wir speichern
+            user_input.pop("info_vlans", None)
+            user_input.pop("info_pvid", None)
+
             if not user_input.get("confirm"):
                 return self.async_show_form(
                     step_id="edit_switch_details",
-                    data_schema=self._get_edit_schema(current),
+                    data_schema=self._get_edit_schema(current, user_input),
                     errors={"base": "confirm_required"},
                 )
 
@@ -181,7 +196,7 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
             except (ValueError, KeyError):
                 return self.async_show_form(
                     step_id="edit_switch_details",
-                    data_schema=self._get_edit_schema(current),
+                    data_schema=self._get_edit_schema(current, user_input),
                     errors={"base": "invalid_json"},
                 )
 
@@ -196,17 +211,50 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=self._get_edit_schema(current),
         )
 
-    def _get_edit_schema(self, current: dict):
+    def _get_edit_schema(self, current: dict, user_input: dict = None):
         """Return schema for editing a switch."""
+        if user_input is None:
+            user_input = {}
+
+        vlan_default = user_input.get("vlans") or json.dumps(current.get("vlans", {}), indent=2)
+        pvid_default = user_input.get("pvid") or json.dumps(current.get("pvid", {}), indent=2)
+        confirm_default = user_input.get("confirm", False)
+
         return vol.Schema(
             {
-                vol.Required("vlans", default=json.dumps(current.get("vlans", {}), indent=2)): selector.TextSelector(
+                # Optionales Dummy-Feld für Info (nur lesen, wird ignoriert)
+                vol.Optional(
+                    "info_vlans",
+                    default="Definiere VLANs im JSON-Format.\nstate = 0 (Untagged), state = 1 (Tagged), state = 2 (Not Member)",
+                ): selector.TextSelector(
                     selector.TextSelectorConfig(multiline=True)
                 ),
-                vol.Required("pvid", default=json.dumps(current.get("pvid", {}), indent=2)): selector.TextSelector(
+
+                vol.Required(
+                    "vlans",
+                    default=vlan_default,
+                ): selector.TextSelector(
                     selector.TextSelectorConfig(multiline=True)
                 ),
-                vol.Required("confirm", default=False): bool,
+
+                vol.Optional(
+                    "info_pvid",
+                    default="Definiere PVID-Zuweisungen im JSON-Format.",
+                ): selector.TextSelector(
+                    selector.TextSelectorConfig(multiline=True)
+                ),
+
+                vol.Required(
+                    "pvid",
+                    default=pvid_default,
+                ): selector.TextSelector(
+                    selector.TextSelectorConfig(multiline=True)
+                ),
+
+                vol.Required(
+                    "confirm",
+                    default=confirm_default,
+                ): bool,
             }
         )
 
