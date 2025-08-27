@@ -42,7 +42,7 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def _finish(self):
         """Create the options entry after any change."""
-        return self.async_create_entry(title="", data={"switches": self.switches})
+        return self.async_create_entry(title="", options={"switches": self.switches})
 
     # -------------------------------
     # ADD
