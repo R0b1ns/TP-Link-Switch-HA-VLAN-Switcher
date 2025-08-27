@@ -1,15 +1,15 @@
 import logging
 from typing import Any, Dict
-import requests
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util import slugify
 
-from .const import DOMAIN, CONF_IP, CONF_USERNAME, CONF_PASSWORD, CONF_VLANS, CONF_PVID
+from .const import DOMAIN, CONF_VLANS, CONF_PVID
 from .entity_base import TPLinkSmartSwitchBaseEntity
+from .tp_link_connector import TPLinkConnector, Phase
 
 _LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(hass, entry, async_add_entities):
     data = entry.data
@@ -35,17 +35,21 @@ async def async_setup_entry(hass, entry, async_add_entities):
         )
     async_add_entities(entities)
 
+
 class VLANProfileSwitch(TPLinkSmartSwitchBaseEntity, SwitchEntity):
-    def __init__(self, config_entry, name, vlans, pvid):
+    def __init__(self, config_entry, name: str, vlans: dict, pvid: dict):
         super().__init__(config_entry)
 
         self._profile_name = name
-        self._vlans = vlans        # {"turn_on": {...}, "turn_off": {...}}
+        self._vlans = vlans        # {"turn_on": [...], "turn_off": [...]}
         self._pvid = pvid          # {"turn_on": {...}, "turn_off": {...}}
         self._is_on = False
 
         self._attr_name = name
         self._attr_unique_id = f"{config_entry.entry_id}_{slugify(name)}"
+
+        # TPLinkConnector initialisieren
+        self._connector = TPLinkConnector(self._ip, self._user, self._pwd)
 
     @property
     def is_on(self) -> bool:
@@ -63,53 +67,32 @@ class VLANProfileSwitch(TPLinkSmartSwitchBaseEntity, SwitchEntity):
             self._is_on = False
             self.async_write_ha_state()
 
-    # --- Netzwerklogik (Login → VLAN → PVID → Logout). Hier minimal & robust. ---
-    def _apply_profile(self, phase: str) -> bool:
-        """phase = 'turn_on' oder 'turn_off'."""
+    # async def async_update(self):
+    #     """HA calls this to refresh the state."""
+    #     await self.hass.async_add_executor_job(self.update_status)
+    #     self.async_write_ha_state()
+    #
+    # def update_status(self):
+    #     """
+    #     Read current switch configuration and update self._is_on.
+    #     If no status-API is available, fallback to last known state.
+    #     """
+    #     try:
+    #         self._connector._start_session()
+    #         # TODO: Hier echte Status-Abfrage einbauen, z.B.:
+    #         # response = self._connector._session.get(f"http://{self._ip}/status.cgi")
+    #         # parse response -> self._is_on = True/False
+    #         # Fallback: Beibehalten des letzten bekannten Status
+    #     except Exception as e:
+    #         _LOGGER.warning("Could not read switch status for '%s': %s", self._profile_name, e)
+    #     finally:
+    #         self._connector._close_session()
+
+    # ---------------------- Profile anwenden ----------------------
+    def _apply_profile(self, phase: Phase) -> bool:
+        """Apply VLAN + PVID using TPLinkConnector."""
         try:
-            s = requests.Session()
-            # 1) Login
-            login = s.post(
-                f"http://{self._ip}/logon.cgi",
-                data={"username": self._user, "password": self._pwd, "cpassword": "", "logon": "Login"},
-                timeout=8,
-            )
-            if login.status_code != 200:
-                _LOGGER.error("Login fehlgeschlagen (%s): HTTP %s", self._ip, login.status_code)
-                return False
-
-            # --- VLAN anwenden (du implementierst bei Bedarf Details) ---
-            # Erwartete Struktur self._vlans:
-            # {"turn_on": {<port>: <state> ...}, "turn_off": {...}}
-            vlan_cfg = self._vlans.get(phase, {})
-            if vlan_cfg:
-                _LOGGER.debug("Würde VLAN anwenden (%s) für %s/%s: %s", phase, self._vname, self._vid, vlan_cfg)
-                # TODO: Hier deine reale VLAN-Logik einbauen
-                # Beispiel (kommentiert): s.get(f"http://{self._ip}/qvlanSet.cgi?...")
-
-            # --- PVID anwenden ---
-            # Erwartete Struktur self._pvid:
-            # {"turn_on": {"<pvid>": [ports...]}, "turn_off": {...}}
-            pvid_cfg = self._pvid.get(phase, {})
-            if pvid_cfg:
-                for pvid_str, ports in pvid_cfg.items():
-                    pbm = 0
-                    for p in ports:
-                        # Port-Bitmaske berechnen (Port 1 -> Bit0)
-                        if isinstance(p, int) and p >= 1:
-                            pbm |= (1 << (p - 1))
-                    url = f"http://{self._ip}/vlanPvidSet.cgi"
-                    params = {"pbm": str(pbm), "pvid": str(pvid_str)}
-                    _LOGGER.debug("Setze PVID (%s/%s): GET %s params=%s", self._vname, self._vid, url, params)
-                    s.get(url, params=params, timeout=8)
-
-            # 4) Logout (best effort)
-            try:
-                s.get(f"http://{self._ip}/Logout.htm", timeout=5)
-            except Exception:
-                pass
-
-            return True
+            return self._connector.apply_profile(self._vlans, self._pvid, phase)
         except Exception as e:
-            _LOGGER.exception("Fehler beim Anwenden des Profils %s auf %s/%s: %s", phase, self._vname, self._vid, e)
+            _LOGGER.exception("Fehler beim Anwenden des Profils %s auf %s: %s", phase, self._profile_name, e)
             return False
