@@ -89,36 +89,42 @@ class VlanSwitchOptionsFlowHandler(config_entries.OptionsFlow):
   "turn_on": [
     {
       "vid": 1,
-      "vname": "Management",
+      "vname": "Home network",
       "ports": {
-        "1": 0,
-        "2": 2,
-        "3": 1,
-        "4": 0,
-        "5": 0,
+        "3": 2
+      }
+    },
+    {
+      "vid": 20,
+      "vname": "Guest network",
+      "ports": {
+        "3": 0
       }
     }
   ],
   "turn_off": [
     {
       "vid": 1,
-      "vname": "Management",
+      "vname": "Home network",
       "ports": {
-        "1": 2,
-        "2": 0,
-        "3": 1,
-        "4": 0,
-        "5": 0,
+        "3": 0
+      }
+    },
+    {
+      "vid": 20,
+      "vname": "Guest network",
+      "ports": {
+        "3": 2
       }
     }
   ]
 }"""
         pvid_template = """{
   "turn_on": {
-    "1": [1,2]
+    "10": [5,6]
   },
   "turn_off": {
-    "10": [1,2]
+    "1": [1,2,3,6,7,8]
   }
 }"""
 
